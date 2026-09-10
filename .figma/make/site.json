@@ -1,0 +1,10 @@
+{
+  "description": "Manage your expenses effortlessly with categorized tracking and alerts for overspending, helping individuals stay on budget and improve financial health.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
