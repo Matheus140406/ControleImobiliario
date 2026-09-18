@@ -1568,7 +1568,7 @@ function NewContractModal({ tenants, properties, guarantors, onClose, onSave }: 
 
   const canNext = () => {
     if (step === 1) return form.tenantId && form.propertyId
-    if (step === 2) return form.rentValue && form.startDate && form.endDate
+    if (step === 2) return form.rentValue && form.startDate && form.endDate && Number(form.dueDay) >= 1 && Number(form.dueDay) <= 31
     if (step === 3) return form.guarantee === "seguro" || (form.guarantee === "caucao" && form.cautionValue) || (form.guarantee === "fiador" && form.guarantorId)
     return true
   }
@@ -1624,9 +1624,7 @@ function NewContractModal({ tenants, properties, guarantors, onClose, onSave }: 
             <Input type="number" placeholder="0,00" value={form.rentValue} onChange={e => upd("rentValue", e.target.value)} />
           </Field>
           <Field label="Dia de Vencimento">
-            <Sel value={form.dueDay} onChange={e => upd("dueDay", e.target.value)}>
-              {[1,5,10,15,20,25].map(d => <option key={d} value={d}>Dia {d}</option>)}
-            </Sel>
+            <Input type="number" min={1} max={31} placeholder="Ex: 15" value={form.dueDay} onChange={e => upd("dueDay", e.target.value)} />
           </Field>
           <Field label="Data de Início">
             <Input type="date" value={form.startDate} onChange={e => upd("startDate", e.target.value)} />
