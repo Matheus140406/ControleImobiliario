@@ -76,6 +76,25 @@ function calcFine(base: number, daysLate: number, fineRate: number, interestRate
   return { fine, interest, total: base + fine + interest }
 }
 
+function generateInvoicesForContract(contract: Contract): Invoice[] {
+  const invoices: Invoice[] = []
+  const start = new Date(contract.startDate)
+  const end = new Date(contract.endDate)
+  const cursor = new Date(start.getFullYear(), start.getMonth(), contract.dueDay)
+  if (cursor < start) cursor.setMonth(cursor.getMonth() + 1)
+
+  while (cursor <= end) {
+    const dueDate = cursor.toISOString().slice(0, 10)
+    const status: InvoiceStatus = new Date(dueDate) < TODAY ? "atrasado" : "pendente"
+    invoices.push({
+      id: "inv" + genId(), contractId: contract.id, tenantId: contract.tenantId, propertyId: contract.propertyId,
+      dueDate, status, baseValue: contract.rentValue,
+    })
+    cursor.setMonth(cursor.getMonth() + 1)
+  }
+  return invoices
+}
+
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement("a")
@@ -1317,13 +1336,14 @@ function CaucaoReturnModal({ contract, tenant, onClose, onConfirm }: {
 // ═══════════════════════════════════════════════════════════════════════════════
 type ContratosTab = "contratos" | "caucoes"
 
-function Contratos({ contracts, tenants, properties, invoices, guarantors, addLog, addToast, setContracts, addToTrash, setProperties }: {
+function Contratos({ contracts, tenants, properties, invoices, guarantors, addLog, addToast, setContracts, addToTrash, setProperties, setInvoices }: {
   contracts: Contract[]; tenants: Tenant[]; properties: Property[]; invoices: Invoice[]; guarantors: Guarantor[]
   addLog: (e: Omit<LogEntry, "id" | "at" | "by">) => void
   addToast: (m: string, t?: ToastItem["type"]) => void
   setContracts: React.Dispatch<React.SetStateAction<Contract[]>>
   addToTrash: (item: Omit<TrashItem, "id" | "deletedAt" | "deletedBy">) => void
   setProperties: React.Dispatch<React.SetStateAction<Property[]>>
+  setInvoices: React.Dispatch<React.SetStateAction<Invoice[]>>
 }) {
   const [tab, setTab] = useState<ContratosTab>("contratos")
   const [selected, setSelected] = useState<Contract | null>(null)
@@ -1451,6 +1471,7 @@ function Contratos({ contracts, tenants, properties, invoices, guarantors, addLo
           onClose={() => setShowNew(false)}
           onSave={(c) => {
             setContracts(prev => [...prev, c])
+            setInvoices(prev => [...prev, ...generateInvoicesForContract(c)])
             setProperties(prev => prev.map(p => p.id === c.propertyId ? { ...p, status: "alugado", contractId: c.id } : p))
             addLog({ action: "criar", entityType: "Contrato", entityName: `Contrato ${tenants.find(t => t.id === c.tenantId)?.name}` })
             addToast("Contrato criado com sucesso", "success")
@@ -2388,7 +2409,7 @@ export default function App() {
           {screen === "contratos" && (
             <Contratos
               contracts={contracts} tenants={tenants} properties={properties} invoices={invoices} guarantors={guarantors}
-              setContracts={setContracts} setProperties={setProperties} addToTrash={addToTrash} {...commonProps}
+              setContracts={setContracts} setProperties={setProperties} setInvoices={setInvoices} addToTrash={addToTrash} {...commonProps}
             />
           )}
           {screen === "imoveis" && (
