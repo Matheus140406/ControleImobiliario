@@ -76,6 +76,42 @@ function calcFine(base: number, daysLate: number, fineRate: number, interestRate
   return { fine, interest, total: base + fine + interest }
 }
 
+function daysInMonth(year: number, month: number) {
+  return new Date(year, month + 1, 0).getDate()
+}
+
+function dueDateFor(year: number, month: number, dueDay: number) {
+  const day = Math.min(dueDay, daysInMonth(year, month))
+  return new Date(year, month, day)
+}
+
+function nextMonth(year: number, month: number): [number, number] {
+  return month > 10 ? [year + 1, 0] : [year, month + 1]
+}
+
+function generateInvoicesForContract(contract: Contract): Invoice[] {
+  const invoices: Invoice[] = []
+  const start = new Date(contract.startDate)
+  const end = new Date(contract.endDate)
+  const dueDay = Math.min(Math.max(Math.round(contract.dueDay), 1), 31)
+  let year = start.getFullYear()
+  let month = start.getMonth()
+  if (dueDateFor(year, month, dueDay) < start) [year, month] = nextMonth(year, month)
+
+  let due = dueDateFor(year, month, dueDay)
+  while (due <= end) {
+    const dueDate = due.toISOString().slice(0, 10)
+    const status: InvoiceStatus = due < TODAY ? "atrasado" : "pendente"
+    invoices.push({
+      id: "inv" + genId(), contractId: contract.id, tenantId: contract.tenantId, propertyId: contract.propertyId,
+      dueDate, status, baseValue: contract.rentValue,
+    })
+    ;[year, month] = nextMonth(year, month)
+    due = dueDateFor(year, month, dueDay)
+  }
+  return invoices
+}
+
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement("a")
@@ -1317,13 +1353,14 @@ function CaucaoReturnModal({ contract, tenant, onClose, onConfirm }: {
 // ═══════════════════════════════════════════════════════════════════════════════
 type ContratosTab = "contratos" | "caucoes"
 
-function Contratos({ contracts, tenants, properties, invoices, guarantors, addLog, addToast, setContracts, addToTrash, setProperties }: {
+function Contratos({ contracts, tenants, properties, invoices, guarantors, addLog, addToast, setContracts, addToTrash, setProperties, setInvoices }: {
   contracts: Contract[]; tenants: Tenant[]; properties: Property[]; invoices: Invoice[]; guarantors: Guarantor[]
   addLog: (e: Omit<LogEntry, "id" | "at" | "by">) => void
   addToast: (m: string, t?: ToastItem["type"]) => void
   setContracts: React.Dispatch<React.SetStateAction<Contract[]>>
   addToTrash: (item: Omit<TrashItem, "id" | "deletedAt" | "deletedBy">) => void
   setProperties: React.Dispatch<React.SetStateAction<Property[]>>
+  setInvoices: React.Dispatch<React.SetStateAction<Invoice[]>>
 }) {
   const [tab, setTab] = useState<ContratosTab>("contratos")
   const [selected, setSelected] = useState<Contract | null>(null)
@@ -1451,6 +1488,7 @@ function Contratos({ contracts, tenants, properties, invoices, guarantors, addLo
           onClose={() => setShowNew(false)}
           onSave={(c) => {
             setContracts(prev => [...prev, c])
+            setInvoices(prev => [...prev, ...generateInvoicesForContract(c)])
             setProperties(prev => prev.map(p => p.id === c.propertyId ? { ...p, status: "alugado", contractId: c.id } : p))
             addLog({ action: "criar", entityType: "Contrato", entityName: `Contrato ${tenants.find(t => t.id === c.tenantId)?.name}` })
             addToast("Contrato criado com sucesso", "success")
@@ -1547,7 +1585,7 @@ function NewContractModal({ tenants, properties, guarantors, onClose, onSave }: 
 
   const canNext = () => {
     if (step === 1) return form.tenantId && form.propertyId
-    if (step === 2) return form.rentValue && form.startDate && form.endDate
+    if (step === 2) return form.rentValue && form.startDate && form.endDate && Number.isInteger(Number(form.dueDay)) && Number(form.dueDay) >= 1 && Number(form.dueDay) <= 31
     if (step === 3) return form.guarantee === "seguro" || (form.guarantee === "caucao" && form.cautionValue) || (form.guarantee === "fiador" && form.guarantorId)
     return true
   }
@@ -1603,9 +1641,7 @@ function NewContractModal({ tenants, properties, guarantors, onClose, onSave }: 
             <Input type="number" placeholder="0,00" value={form.rentValue} onChange={e => upd("rentValue", e.target.value)} />
           </Field>
           <Field label="Dia de Vencimento">
-            <Sel value={form.dueDay} onChange={e => upd("dueDay", e.target.value)}>
-              {[1,5,10,15,20,25].map(d => <option key={d} value={d}>Dia {d}</option>)}
-            </Sel>
+            <Input type="number" min={1} max={31} step={1} placeholder="Ex: 15" value={form.dueDay} onChange={e => upd("dueDay", e.target.value)} />
           </Field>
           <Field label="Data de Início">
             <Input type="date" value={form.startDate} onChange={e => upd("startDate", e.target.value)} />
@@ -2388,7 +2424,7 @@ export default function App() {
           {screen === "contratos" && (
             <Contratos
               contracts={contracts} tenants={tenants} properties={properties} invoices={invoices} guarantors={guarantors}
-              setContracts={setContracts} setProperties={setProperties} addToTrash={addToTrash} {...commonProps}
+              setContracts={setContracts} setProperties={setProperties} setInvoices={setInvoices} addToTrash={addToTrash} {...commonProps}
             />
           )}
           {screen === "imoveis" && (
